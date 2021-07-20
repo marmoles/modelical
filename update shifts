@@ -1,0 +1,51 @@
+start_date = datetime.datetime(2021, 1, 1,00) #Establecemos una fecha inicial
+ 
+allRecords = env['hr.leave'].search(['&',('request_date_from','>=',start_date),('state',"in",['confirm', 'validate1', 'validate'])]) #Todos los registros de leaves Confirmados, aprobados o validados(no en draft o refused) con la fecha inicial igual o mayor que 01/01/2021
+ 
+ 
+#DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S" 
+#BORRA LOS FORECAST SHIFTS QUE NO TENGAN TIME OFF ASOCIADO.
+forecasts = env['planning.slot'].search(['&',('project_id',"=",1079),('start_datetime','>=',start_date)]) #todas las planning shifts con el project_id = 1079(proyecto de vacaciones) y fecha inicial mayor o igual que 01/01/2021
+for f in forecasts: #para cada planning shift entre todas las que cumplan la condición de la linea anterior:
+  if f.x_studio_time_off not in allRecords: #si el campo x_studio_time_off no existe entre todos los registros que cumplan la condición de la linea 14:
+    f.unlink() #borrar
+ 
+ 
+ 
+for record in allRecords: #para cada registro entre todos los registros que cumplan la condición de la linea 14:
+  start = record.request_date_from       #Obtengo el campo date start de Time Off 
+  #start = datetime.datetime.strptime(str(start), DATETIME_FORMAT) + datetime.timedelta(hours=7)
+  start = datetime.datetime(start.year, start.month, start.day,7) #Doy formato al campo start, y le asigno 7 a las horas
+  start_second_month = datetime.datetime(start.year, start.month + 1, 1, 7)
+  start_third_month = datetime.datetime(start.year, start.month + 2, 1, 7)
+  end_first_month = datetime.datetime(start_second_month.year, start_second_month.month, 1, 17) - datetime.timedelta(days=1)
+  end = record.request_date_to           #Obtengo el campo date end de Time Off
+  #end = datetime.datetime.strptime(str(end), DATETIME_FORMAT) + datetime.timedelta(hours=17)
+  end = datetime.datetime(end.year, end.month, end.day,17) #Doy formato al campo end, y le asigno 17 a las horas
+  end_second_month = datetime.datetime(start_third_month.year, start_third_month.month, 1, 17) - datetime.timedelta(days=1)
+  employee = record.employee_id.id       #Obtengo el campo Employee de Time Off
+  dif_month = end.month - start.month
+#ACTUALIZAR FORECAST SHIFTS EXISTENTES
+  if dif_month == 0:
+    if record.x_studio_planning_shift: #si el campo Plannig Shift existe:
+      shift = record.x_studio_planning_shift #Obtengo el campo Planning Shift de Time Off
+      forecast = env['planning.slot'].search([("id","=",shift.id)]) #todas las planning shift en las que id es igual al campo x_studio_planning_shift de los time off.
+      if forecast: #si existe una planning shift con la condición de la linea 36:
+        forecast.write({'employee_id': employee,'project_id':1079, 'task_id':36181, 'start_datetime':start, 'end_datetime':end, 'x_studio_time_off':record.id}) #Modifica la planning shift con los siguientes datos.
+#CREA FORECAST SHIFTS NUEVAS
+    else: #en otro caso:
+      forecast = env['planning.slot'].create({'employee_id': employee,'project_id':1079, 'task_id':36181, 'start_datetime':start, 'end_datetime':end, 'x_studio_time_off':record.id}) #Crea una nueva planning shift con los siguientes datos.
+      if forecast: #una vez creado:
+        record.write({'x_studio_planning_shift':forecast.id}) #asigna al campo de los time off x_studio_planning_shift el valor del id de la planning shift creada
+  if dif_month == 1: #hay que crear dos hojas
+    if record.x_studio_planning_shift: #si el campo Plannig Shift existe:
+      shift = record.x_studio_planning_shift #Obtengo el campo Planning Shift de Time Off
+      forecast = env['planning.slot'].search([("id","=",shift.id)]) #todas las planning shift en las que id es igual al campo x_studio_planning_shift de los time off.
+      if forecast: #si existe una planning shift con la condición de la linea 36:
+        forecast.write({'employee_id': employee,'project_id':1079, 'task_id':36181, 'start_datetime':start, 'end_datetime':end, 'x_studio_time_off':record.id}) #Modifica la planning shift con los siguientes datos.
+#CREA FORECAST SHIFTS NUEVAS
+    else: #en otro caso:
+      forecast = env['planning.slot'].create({'employee_id': employee,'project_id':1079, 'task_id':36181, 'start_datetime':start, 'end_datetime':end_first_month, 'x_studio_time_off':record.id}) #Crea una nueva planning shift con los siguientes datos.
+      forecast = env['planning.slot'].create({'employee_id': employee,'project_id':1079, 'task_id':36181, 'start_datetime':start_second_month, 'end_datetime':end, 'x_studio_time_off':record.id}) #Crea una nueva planning shift con los siguientes datos.      
+      if forecast: #una vez creado:
+        record.write({'x_studio_planning_shift':forecast.id}) #asigna al campo de los time off x_studio_planning_shift el valor del id de la planning shift creada
